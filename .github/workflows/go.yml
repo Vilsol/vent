@@ -26,9 +26,9 @@ jobs:
       - name: Release Windows
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
-          with:
-            files: |
-              client.exe
-              host.exe
+        with:
+          files: |
+            client.exe
+            host.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
