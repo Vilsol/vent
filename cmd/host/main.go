@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/Vilsol/tunnel-among-us/config"
+	"github.com/Vilsol/tunnel-among-us/utils"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/pkg/errors"
@@ -11,10 +13,14 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 )
 
 const maxBufferSize = 1024
+
+var logWriter = make(chan string, 100)
 
 func main() {
 	config.InitializeConfig()
@@ -26,6 +32,29 @@ func main() {
 	}
 
 	log.SetLevel(level)
+
+	if log.IsLevelEnabled(log.DebugLevel) {
+		go func() {
+			f, err := os.Create("packet.log")
+
+			if err != nil {
+				panic(err)
+			}
+
+			defer f.Close()
+
+			for {
+				line := <-logWriter
+
+				if !strings.HasSuffix(line, "\n") {
+					line = line + "\n"
+				}
+
+				f.WriteString(line)
+				f.Sync()
+			}
+		}()
+	}
 
 	host()
 }
@@ -56,7 +85,10 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 			for {
 				msg, err := wsutil.ReadClientBinary(conn)
 
-				log.Debugf("[%s] -> %s", conn.RemoteAddr().String(), msg)
+				log.Debugf("[%s] -> %s", conn.RemoteAddr().String(), utils.BytesToHex(msg))
+				if log.IsLevelEnabled(log.DebugLevel) {
+					logWriter <- fmt.Sprintf("[%s] -> %s", conn.RemoteAddr().String(), utils.BytesToHex(msg))
+				}
 
 				if err != nil {
 					log.Error("Error reading message: ", err)
@@ -79,7 +111,10 @@ func handleConnection(w http.ResponseWriter, r *http.Request) {
 				break
 			}
 
-			log.Debugf("[%s] <- %s", conn.RemoteAddr().String(), msg)
+			log.Debugf("[%s] <- %s", conn.RemoteAddr().String(), utils.BytesToHex(msg))
+			if log.IsLevelEnabled(log.DebugLevel) {
+				logWriter <- fmt.Sprintf("[%s] <- %s", conn.RemoteAddr().String(), utils.BytesToHex(msg))
+			}
 
 			err = wsutil.WriteServerBinary(conn, msg)
 			if err != nil {

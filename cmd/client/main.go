@@ -1,23 +1,29 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"github.com/Vilsol/tunnel-among-us/config"
+	"github.com/Vilsol/tunnel-among-us/utils"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"io"
 	"net"
 	"strconv"
 	"time"
 )
 
+type Message struct {
+	Address *net.Addr
+	Payload []byte
+}
+
 const maxBufferSize = 1024
 
 var discoveryPacket []byte
+
+var messageSender chan *Message
 
 func main() {
 	config.InitializeConfig()
@@ -36,97 +42,27 @@ func main() {
 }
 
 func connect() {
-	address := "ws://" + viper.GetString("socket.host") + ":" + strconv.Itoa(viper.GetInt("socket.port"))
-	conn, _, _, err := ws.DefaultDialer.Dial(context.Background(), address)
+	go broadcaster()
+
+	err := server()
 
 	if err != nil {
-		log.Error("Error dialing: ", err)
-	} else {
-		log.Info("Connected to: ", address)
-
-		err, sender, receiver := server()
-
-		go func() {
-			for {
-				raddr, err := net.ResolveUDPAddr("udp", viper.GetString("broadcast.host")+":"+strconv.Itoa(viper.GetInt("broadcast.port")))
-
-				if err != nil {
-					log.Error(errors.Wrap(err, "error resolving address"))
-					break
-				}
-
-				conn, err := net.DialUDP("udp", nil, raddr)
-
-				_, err = io.Copy(conn, bytes.NewReader(discoveryPacket))
-
-				if err != nil {
-					log.Error(errors.Wrap(err, "error sending discovery"))
-					break
-				}
-
-				time.Sleep(time.Second)
-			}
-		}()
-
-		go func() {
-			for {
-				msg, err := wsutil.ReadServerBinary(conn)
-
-				log.Debugf("[%s] -> %s", conn.RemoteAddr().String(), msg)
-
-				if err != nil {
-					log.Error("Error reading message: ", err)
-					close(sender)
-					return
-				}
-
-				if len(msg) == 0 {
-					continue
-				}
-
-				sender <- msg
-			}
-		}()
-
-		for {
-			msg, ok := <-receiver
-
-			if !ok {
-				break
-			}
-
-			log.Debugf("[%s] <- %s", conn.RemoteAddr().String(), msg)
-
-			err = wsutil.WriteClientBinary(conn, msg)
-			if err != nil {
-				log.Error("Error writing message: ", err)
-				return
-			}
-		}
-
-		log.Infof("Closing connection to: %s", conn.RemoteAddr().String())
+		panic(err)
 	}
 }
 
-func server() (error, chan []byte, chan []byte) {
-	listener, err := net.ListenPacket("udp", "127.0.0.1:"+strconv.Itoa(viper.GetInt("server.port")))
+func server() error {
+	listener, err := net.ListenPacket("udp", ":"+strconv.Itoa(viper.GetInt("server.port")))
 
 	if err != nil {
-		return errors.Wrap(err, "error listening to packets"), nil, nil
+		return errors.Wrap(err, "error listening to packets")
 	}
 
-	messageSender := make(chan []byte, 10)
-	messageReceiver := make(chan []byte, 10)
-
+	messageSender = make(chan *Message, 50)
 	closer := make(chan bool, 2)
 
-	clientAddrChannel := make(chan *net.Addr)
-
 	go func() {
-		defer listener.Close()
 		defer close(closer)
-
-		clientAddr := <-clientAddrChannel
 
 		for {
 			message, ok := <-messageSender
@@ -135,43 +71,153 @@ func server() (error, chan []byte, chan []byte) {
 				break
 			}
 
-			if _, err := listener.WriteTo(message, *clientAddr); err != nil {
+			if _, err := listener.WriteTo(message.Payload, *message.Address); err != nil {
 				log.Error("Error sending packet: ", err)
 				return
 			}
 		}
 	}()
 
+	for {
+		buffer := make([]byte, maxBufferSize)
+		length, clientAddr, err := listener.ReadFrom(buffer)
+
+		if err != nil {
+			return errors.Wrap(err, "error receiving packet: ")
+		}
+
+		client := getClient(&clientAddr)
+		client.Queue <- buffer[:length]
+	}
+}
+
+type Client struct {
+	Connection *net.Conn
+	Queue      chan []byte
+}
+
+var clients = make(map[string]*Client)
+
+func getClient(address *net.Addr) *Client {
+	if client, ok := clients[(*address).String()]; ok {
+		return client
+	}
+
+	sockAddress := "ws://" + viper.GetString("socket.host") + ":" + strconv.Itoa(viper.GetInt("socket.port"))
+	conn, _, _, err := ws.DefaultDialer.Dial(context.Background(), sockAddress)
+
+	if err != nil {
+		panic(err)
+	}
+
+	log.Infof("New client: %s", *address)
+
+	client := &Client{
+		Connection: &conn,
+		Queue:      make(chan []byte, 10),
+	}
+
+	clients[(*address).String()] = client
+
 	go func() {
-		defer listener.Close()
-		defer close(messageReceiver)
-
-		sentClientAddr := false
-
 		for {
-			select {
-			case _ = <-closer:
-				return
-			default:
-				break
-			}
+			msg, err := wsutil.ReadServerBinary(conn)
 
-			buffer := make([]byte, maxBufferSize)
-			length, clientAddr, err := listener.ReadFrom(buffer)
-
-			if !sentClientAddr {
-				sentClientAddr = true
-				clientAddrChannel <- &clientAddr
-			}
+			log.Debugf("[%s] -> %s", conn.RemoteAddr().String(), utils.BytesToHex(msg))
 
 			if err != nil {
-				log.Error("Error receiving packet: ", err)
+				log.Error("Error reading message: ", err)
 				return
 			}
 
-			messageReceiver <- buffer[:length]
+			if len(msg) == 0 {
+				continue
+			}
+
+			messageSender <- &Message{
+				Address: address,
+				Payload: msg,
+			}
 		}
 	}()
 
-	return nil, messageSender, messageReceiver
+	go func() {
+		for {
+			msg, ok := <-client.Queue
+
+			if !ok {
+				break
+			}
+
+			log.Debugf("[%s] <- %s", conn.RemoteAddr().String(), utils.BytesToHex(msg))
+
+			err = wsutil.WriteClientBinary(conn, msg)
+			if err != nil {
+				log.Error("Error writing message: ", err)
+				return
+			}
+		}
+	}()
+
+	return client
+}
+
+func broadcaster() {
+	ifaces, err := net.Interfaces()
+
+	if err != nil {
+		panic(err)
+	}
+
+	for _, iface := range ifaces {
+		addrs, err := iface.Addrs()
+		if err == nil {
+			for _, addr := range addrs {
+				if n, ok := addr.(*net.IPNet); ok {
+					if n.IP.To4() != nil {
+						log.Infof("Broadcasting game on interface: %s - %s", iface.Name, addr.String())
+						break
+					}
+				}
+			}
+		}
+	}
+
+	pc, err := net.ListenPacket("udp4", ":64532")
+
+	if err != nil {
+		panic(err)
+	}
+
+	defer pc.Close()
+
+	for {
+		for _, i := range ifaces {
+			addresses, err := i.Addrs()
+			if err == nil {
+				for _, addr := range addresses {
+					if n, ok := addr.(*net.IPNet); ok {
+						if n.IP.To4() != nil {
+							broadcastIp := net.ParseIP(n.IP.String())
+							broadcastIp[15] = 255
+
+							log.Debugf("Broadcasting to: %s", broadcastIp.String())
+
+							addr, err := net.ResolveUDPAddr("udp4", broadcastIp.String()+":"+strconv.Itoa(viper.GetInt("broadcast.port")))
+							if err != nil {
+								panic(err)
+							}
+
+							_, err = pc.WriteTo(discoveryPacket, addr)
+							if err != nil {
+								panic(err)
+							}
+						}
+					}
+				}
+			}
+		}
+
+		time.Sleep(time.Second)
+	}
 }
