@@ -34,7 +34,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
         with:
           files: |
-            client.exe
-            host.exe
+            vent.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
