@@ -21,7 +21,13 @@ jobs:
 
       - name: Build Windows
         if: runner.os == 'Windows'
-        run: go build -v -o client.exe cmd/client/main.go && go build -v -o host.exe cmd/host/main.go
+        run: go build -ldflags="-s -w" -v -o vent.exe .
+
+      - name: Compress binaries
+        uses: svenstaro/upx-action@v2
+        with:
+          file: vent.exe
+          args: "-9"
 
       - name: Release Windows
         uses: softprops/action-gh-release@v1

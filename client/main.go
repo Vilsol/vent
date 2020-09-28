@@ -1,9 +1,8 @@
-package main
+package client
 
 import (
 	"context"
-	"github.com/Vilsol/tunnel-among-us/config"
-	"github.com/Vilsol/tunnel-among-us/utils"
+	"github.com/Vilsol/vent/utils"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/pkg/errors"
@@ -25,18 +24,10 @@ var discoveryPacket []byte
 
 var messageSender chan *Message
 
-func main() {
-	config.InitializeConfig()
+func RunClient() {
+	log.Info("Started vent client")
 
 	discoveryPacket = append([]byte{0x04, 0x02}, []byte(viper.GetString("server.name")+"~Open~1~")...)
-
-	level, err := log.ParseLevel(viper.GetString("log.level"))
-
-	if err != nil {
-		panic(err)
-	}
-
-	log.SetLevel(level)
 
 	connect()
 }
@@ -191,30 +182,39 @@ func broadcaster() {
 
 	defer pc.Close()
 
-	for {
-		for _, i := range ifaces {
-			addresses, err := i.Addrs()
-			if err == nil {
-				for _, addr := range addresses {
-					if n, ok := addr.(*net.IPNet); ok {
-						if n.IP.To4() != nil {
-							broadcastIp := net.ParseIP(n.IP.String())
-							broadcastIp[15] = 255
+	validAddresses := make(map[string]bool)
 
-							log.Debugf("Broadcasting to: %s", broadcastIp.String())
-
-							addr, err := net.ResolveUDPAddr("udp4", broadcastIp.String()+":"+strconv.Itoa(viper.GetInt("broadcast.port")))
-							if err != nil {
-								panic(err)
-							}
-
-							_, err = pc.WriteTo(discoveryPacket, addr)
-							if err != nil {
-								panic(err)
-							}
-						}
+	for _, i := range ifaces {
+		addresses, err := i.Addrs()
+		if err == nil {
+			for _, addr := range addresses {
+				if n, ok := addr.(*net.IPNet); ok {
+					if n.IP.To4() != nil {
+						broadcastIp := net.ParseIP(n.IP.String())
+						broadcastIp[15] = 255
+						validAddresses[broadcastIp.String()] = true
 					}
 				}
+			}
+		}
+	}
+
+	for {
+		for broadcastIp := range validAddresses {
+			log.Debugf("Broadcasting to: %s", broadcastIp)
+
+			addr, err := net.ResolveUDPAddr("udp4", broadcastIp+":"+strconv.Itoa(viper.GetInt("broadcast.port")))
+			if err != nil {
+				log.Warnf("Error broadcasting to %s. Excluded from further broadcasts: %s", broadcastIp, err)
+				delete(validAddresses, broadcastIp)
+				continue
+			}
+
+			_, err = pc.WriteTo(discoveryPacket, addr)
+			if err != nil {
+				log.Warnf("Error broadcasting to %s. Excluded from further broadcasts: %s", broadcastIp, err)
+				delete(validAddresses, broadcastIp)
+				continue
 			}
 		}
 

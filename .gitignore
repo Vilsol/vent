@@ -110,3 +110,7 @@ modules.xml
 .idea/sonarlint
 
 # End of https://www.gitignore.io/api/go,jetbrains+all
+
+*.log
+*.ico
+config.json

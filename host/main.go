@@ -1,10 +1,9 @@
-package main
+package host
 
 import (
 	"bytes"
 	"fmt"
-	"github.com/Vilsol/tunnel-among-us/config"
-	"github.com/Vilsol/tunnel-among-us/utils"
+	"github.com/Vilsol/vent/utils"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/pkg/errors"
@@ -22,16 +21,8 @@ const maxBufferSize = 1024
 
 var logWriter = make(chan string, 100)
 
-func main() {
-	config.InitializeConfig()
-
-	level, err := log.ParseLevel(viper.GetString("log.level"))
-
-	if err != nil {
-		panic(err)
-	}
-
-	log.SetLevel(level)
+func RunHost() {
+	log.Info("Started vent host")
 
 	if log.IsLevelEnabled(log.DebugLevel) {
 		go func() {
