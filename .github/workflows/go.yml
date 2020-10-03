@@ -6,13 +6,14 @@ jobs:
     name: Build for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
             file: vent
             args: --best --lzma
             strip: true
-            flags: -ldflags="-s"
+            flags: -ldflags="-w"
           - os: windows-latest
             file: vent.exe
             args: -9
