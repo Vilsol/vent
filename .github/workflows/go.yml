@@ -13,7 +13,7 @@ jobs:
             file: vent
             args: --best --lzma
             strip: true
-            flags: -ldflags="-w"
+            flags: ""
           - os: windows-latest
             file: vent.exe
             args: -9
