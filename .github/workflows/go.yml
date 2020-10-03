@@ -20,13 +20,13 @@ jobs:
             args: -9
             strip: false
             flags: -ldflags="-s -w"
-              gccgo: 1
+            gccgo: 1
           - os: macos-latest
             file: vent
             args: --best
             strip: true
             flags: -ldflags="-s"
-              gccgo: 1
+            gccgo: 1
     steps:
 
       - name: Set up Go
