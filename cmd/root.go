@@ -44,7 +44,7 @@ func Execute() {
 func init() {
 	rootCmd.PersistentFlags().String("log", "info", "The log level to output")
 	rootCmd.PersistentFlags().Bool("colors", true, "Log output with colors")
-	rootCmd.PersistentFlags().Int("port", 56217, "Websocket port")
+	rootCmd.PersistentFlags().Int("port", 32323, "Websocket port")
 	rootCmd.PersistentFlags().Int("game-port", 22023, "Game server port")
 
 	_ = viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log"))

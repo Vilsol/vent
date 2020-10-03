@@ -18,7 +18,7 @@ Flags:
       --game-port int   Game server port (default 22023)
   -h, --help            help for vent
       --log string      The log level to output (default "info")
-      --port int        Websocket port (default 56217)
+      --port int        Websocket port (default 32323)
 
 Use "vent [command] --help" for more information about a command.
 ```
