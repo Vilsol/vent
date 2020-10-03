@@ -12,14 +12,17 @@ jobs:
             file: vent
             args: --best --lzma
             strip: true
+            flags: -ldflags="-s"
           - os: windows-latest
             file: vent.exe
             args: -9
             strip: false
+              flags: -ldflags="-s -w"
           - os: macos-latest
             file: vent
             args: --best
             strip: true
+              flags: -ldflags="-s"
     steps:
 
       - name: Set up Go
@@ -35,7 +38,7 @@ jobs:
         run: go get -v -t -d ./...
 
       - name: Build
-        run: go build -ldflags="-s -w" -v -o ${{ matrix.file }} .
+        run: go build ${{ matrix.flags }} -v -o ${{ matrix.file }} .
 
       - name: Compress binaries
         uses: svenstaro/upx-action@v2
