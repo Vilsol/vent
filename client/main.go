@@ -174,7 +174,7 @@ func broadcaster() {
 		}
 	}
 
-	pc, err := net.ListenPacket("udp4", ":64532")
+	pc, err := net.ListenPacket("udp4", ":32420")
 
 	if err != nil {
 		panic(err)
