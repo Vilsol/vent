@@ -3,11 +3,26 @@ on: [push]
 jobs:
 
   build:
-    name: Build
-    runs-on: windows-latest
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            file: vent
+            args: --best --lzma
+            strip: true
+          - os: windows-latest
+            file: vent.exe
+            args: -9
+            strip: false
+          - os: macos-latest
+            file: vent
+            args: --best
+            strip: true
     steps:
 
-      - name: Set up Go 1.15
+      - name: Set up Go
         uses: actions/setup-go@v1
         with:
           go-version: 1.15
@@ -19,21 +34,21 @@ jobs:
       - name: Get dependencies
         run: go get -v -t -d ./...
 
-      - name: Build Windows
-        if: runner.os == 'Windows'
-        run: go build -ldflags="-s -w" -v -o vent.exe .
+      - name: Build
+        run: go build -ldflags="-s -w" -v -o ${{ matrix.file }} .
 
       - name: Compress binaries
         uses: svenstaro/upx-action@v2
         with:
-          file: vent.exe
-          args: "-9"
+          file: ${{ matrix.file }}
+          args: ${{ matrix.args }}
+          strip: ${{ matrix.strip }}
 
-      - name: Release Windows
+      - name: Release
         uses: softprops/action-gh-release@v1
-        if: startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            vent.exe
+            ${{ matrix.file }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
