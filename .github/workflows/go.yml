@@ -17,12 +17,12 @@ jobs:
             file: vent.exe
             args: -9
             strip: false
-              flags: -ldflags="-s -w"
+            flags: -ldflags="-s -w"
           - os: macos-latest
             file: vent
             args: --best
             strip: true
-              flags: -ldflags="-s"
+            flags: -ldflags="-s"
     steps:
 
       - name: Set up Go
