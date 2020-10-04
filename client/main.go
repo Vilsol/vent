@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/binary"
 	"github.com/Vilsol/vent/utils"
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
@@ -196,6 +197,25 @@ func broadcaster() {
 					}
 				}
 			}
+		}
+	}
+
+	for _, address := range viper.GetStringSlice("broadcast.direct") {
+		if ip := net.ParseIP(address); ip != nil {
+			log.Infof("Broadcasting game to address: %s", address)
+			validAddresses[address] = true
+		} else if _, ipNet, err := net.ParseCIDR(address); err == nil {
+			mask := binary.BigEndian.Uint32(ipNet.Mask)
+			start := binary.BigEndian.Uint32(ipNet.IP)
+			finish := (start & mask) | (mask ^ 0xffffffff)
+			for i := start; i <= finish; i++ {
+				ip := make(net.IP, 4)
+				binary.BigEndian.PutUint32(ip, i)
+				log.Infof("Broadcasting game to address: %s", ip)
+				validAddresses[ip.String()] = true
+			}
+		} else {
+			log.Warningf("Unknown IP/Subnet: %s", address)
 		}
 	}
 
