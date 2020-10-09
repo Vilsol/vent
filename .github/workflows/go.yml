@@ -3,7 +3,7 @@ on: [push, pull_request]
 jobs:
 
   build:
-    name: Build for ${{ matrix.os }}
+    name: Build for unknown executor
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
